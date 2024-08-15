@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/eiannone/keyboard"
@@ -46,29 +50,46 @@ func main() {
 	sr := beep.SampleRate(48000)
 	speaker.Init(sr, 4800)
 
-	if err := keyboard.Open(); err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		_ = keyboard.Close()
-	}()
+	t := make(chan struct{})
+	if len(os.Args) > 2 {
+		bpm, _ := strconv.Atoi(os.Args[1])
+		for i := 2; i < len(os.Args); i++ {
+			i := i
+			go func() {
+				playFile(sr, os.Args[i], bpm)
+				t <- struct{}{}
+			}()
 
-	for {
-		char, key, err := keyboard.GetKey()
-		if err != nil {
+			time.Sleep(15 * time.Millisecond)
+		}
+
+		for i := 0; i < len(os.Args)-2; i++ {
+			<-t
+		}
+	} else {
+		if err := keyboard.Open(); err != nil {
 			log.Fatal(err)
 		}
+		defer func() {
+			_ = keyboard.Close()
+		}()
 
-		if key == keyboard.KeyArrowUp {
-			fade += 50
-		}
-		if key == keyboard.KeyArrowDown {
-			fade = max(0.0, fade-50)
-		}
+		for {
+			char, key, err := keyboard.GetKey()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		go playTone(sr, freqs[char], 0.5, time.Duration(fade)*time.Millisecond)
+			if key == keyboard.KeyArrowUp {
+				fade += 50
+			}
+			if key == keyboard.KeyArrowDown {
+				fade = max(0.0, fade-50)
+			}
+
+			go playTone(sr, freqs[char], 0.5, time.Duration(fade)*time.Millisecond)
+		}
 	}
-
 }
 
 func playTone(sr beep.SampleRate, freq float64, amplitude float64, duration time.Duration) {
@@ -89,4 +110,24 @@ func playTone(sr beep.SampleRate, freq float64, amplitude float64, duration time
 		done <- struct{}{}
 	})))
 	<-done
+}
+
+func playFile(sr beep.SampleRate, filename string, bpm int) {
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return
+	}
+
+	for _, char := range content {
+		go playTone(sr, freqs[rune(char)], 0.5, time.Duration(fade)*time.Millisecond)
+		time.Sleep(time.Duration(60000/bpm) * time.Millisecond)
+	}
 }
