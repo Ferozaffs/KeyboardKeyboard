@@ -126,8 +126,11 @@ func playFile(sr beep.SampleRate, filename string, bpm int) {
 		return
 	}
 
-	for _, char := range content {
-		go playTone(sr, freqs[rune(char)], 0.5, time.Duration(fade)*time.Millisecond)
+	count := 0
+	for {
+		go playTone(sr, freqs[rune(content[count])], 0.5, time.Duration(fade)*time.Millisecond)
 		time.Sleep(time.Duration(60000/bpm) * time.Millisecond)
+
+		count = (count + 1) % len(content)
 	}
 }
